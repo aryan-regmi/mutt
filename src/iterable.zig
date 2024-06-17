@@ -8,12 +8,12 @@ pub fn isIterable(comptime T: type) bool {
 
 /// An iterable interface.
 pub fn Iterable(comptime Context: type, comptime Item: type, comptime methods: struct {
-    next: ?fn (Context) ?Item = null,
+    next: ?fn (*Context) ?Item = null,
 }) type {
     return struct {
         /// The interface type for an `Iterable`.
         pub const @"mutt.Iterable" = struct {
-            context: Context,
+            context: *Context,
             pub const ItemType = Item;
 
             /// Returns the next item in the iterator.
@@ -36,18 +36,45 @@ pub fn Iterable(comptime Context: type, comptime Item: type, comptime methods: s
     };
 }
 
+// pub fn Enumerable(comptime Context: type, comptime Item: type) type {
+//     return struct {
+//         const Self = @This();
+//         pub usingnamespace Iterable(*Self, @"mutt.Enumerable", .{.next = })
+//
+//         iter: Iterable(Context, EnumTuple, .{})
+//
+//     };
+// }
+//
+// pub const @"mutt.Enumerable" = struct {
+//     pub usingnamespace Iterable(Context, @"mutt.Enumerable.Tuple", .{ .next = nextImpl });
+//
+//     context: *Context,
+//     count: usize,
+//
+//     fn nextImpl(self: *Context) ?@"mutt.Enumerable.Tuple" {
+//         if (methods.next) |f| {
+//             return .{ .idx = self.count, .val = f(self) };
+//         }
+//
+//         @compileError("`next` is unimplemented");
+//     }
+// };
+//
+// pub const @"mutt.Enumerable.Tuple" = struct { idx: usize, val: Context };
+
 test "Create Iterable" {
     const Tst = struct {
         const Self = @This();
         const Item = u8;
-        pub usingnamespace Iterable(*Self, Item, .{
-            .next = next,
+        pub usingnamespace Iterable(Self, Item, .{
+            .next = nextImpl,
         });
 
         data: []u8,
         idx: usize = 0,
 
-        fn next(self: *Self) ?Item {
+        fn nextImpl(self: *Self) ?Item {
             if (self.idx < self.data.len) {
                 self.idx += 1;
                 return self.data[self.idx - 1];
@@ -65,4 +92,6 @@ test "Create Iterable" {
         try testing.expectEqual(v, data[i]);
         i += 1;
     }
+
+    // std.log.warn("HERE: {any}", .{@TypeOf(.{ .idx = 3, .val = 42 })});
 }
