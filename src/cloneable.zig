@@ -2,31 +2,20 @@ const std = @import("std");
 const testing = std.testing;
 
 /// An interface for a cloneable type.
-pub fn Cloneable(comptime Context: type, comptime methods: struct {
-    clone: ?fn (Context) Context = null,
-    cloneFrom: ?fn (*Context, Context) void = null,
-}) type {
+pub fn Clone(comptime Self: type) type {
+    comptime if (!@hasDecl(Self, "clone")) {
+        const tname = @typeName(Self);
+        @compileError("`clone(" ++ tname ++ ") " ++ tname ++ "` must be implemented by " ++ tname);
+    };
+
     return struct {
-        /// Returns a copy of `self`.
-        pub fn clone(self: Context) Context {
-            if (methods.clone) |f| {
-                return f(self);
-            }
-
-            @compileError("`clone` is unimplemented");
-        }
-
         /// Performs copy-assignment from `src`.
         ///
         /// # Note
         /// `a.cloneFrom(b)` is equivalent to `a = b.clone()`.
         /// This can be overridden (by providing a `cloneFrom` implementation)
         /// to reuse the resources of `a` to avoid unnecessary allocations.
-        pub fn cloneFrom(self: *Context, src: Context) void {
-            if (methods.cloneFrom) |f| {
-                return f(self, src);
-            }
-
+        pub fn cloneFrom(self: *Self, src: Self) void {
             self.* = src.clone();
         }
     };
@@ -35,23 +24,21 @@ pub fn Cloneable(comptime Context: type, comptime methods: struct {
 test "Create Cloneable" {
     const Tst = struct {
         const Self = @This();
-        pub usingnamespace Cloneable(Self, .{
-            .clone = cloneImpl,
-        });
+        pub usingnamespace Clone(Self);
 
         data: u8,
 
-        fn cloneImpl(self: Self) Self {
-            return Self{ .data = self.data + 1 };
+        /// Returns a copy of `self`.
+        pub fn clone(self: Self) Self {
+            return .{ .data = self.data + 1 };
         }
     };
+    const tst = Tst{ .data = 1 };
 
-    const tst = Tst{ .data = 2 };
     const cloned = tst.clone();
+    try testing.expectEqual(2, cloned.data);
+
     var cloned2: Tst = undefined;
     cloned2.cloneFrom(cloned);
-
-    try testing.expectEqual(tst.data, 2);
-    try testing.expectEqual(cloned.data, 3);
-    try testing.expectEqual(cloned2.data, 4);
+    try testing.expectEqual(3, cloned2.data);
 }
