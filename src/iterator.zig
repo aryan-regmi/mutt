@@ -39,19 +39,19 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             } else if ((arg_type != *Self) and (arg_type != *const Self)) {
                 @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
             } else if (ret_type != ?Item) {
-                var err = true;
-                switch (@typeInfo(Item)) {
-                    .Struct => {
-                        // Enumerator `Item` types are valid
-                        if ((@hasDecl(Item, "ItemType")) and (Item == IndexedItem(Item.ItemType))) {
-                            err = false;
-                        }
-                    },
-
-                    else => {
-                        err = true;
-                    },
-                }
+                const err = blk: {
+                    switch (@typeInfo(Item)) {
+                        .Struct => {
+                            // Enumerator `Item` types are valid
+                            if ((@hasDecl(Item, "ItemType")) and (Item == IndexedItem(Item.ItemType))) {
+                                break :blk false;
+                            }
+                        },
+                        else => {
+                            break :blk true;
+                        },
+                    }
+                };
                 if (err) {
                     @compileError("The `next` function must return a `?" ++ @typeName(Item) ++ "`" ++ " (returns `" ++ @typeName(ret_type) ++ "`)");
                 }

@@ -1,5 +1,5 @@
-pub const Iterable = @import("iterable.zig");
-pub const Cloneable = @import("cloneable.zig").Clone;
+pub const Cloneable = @import("clone.zig").Clone;
+pub const Iterable = @import("iterator.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());
