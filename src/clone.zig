@@ -1,25 +1,51 @@
 const std = @import("std");
 const testing = std.testing;
+const InterfaceImplError = @import("common.zig").InterfaceImplError;
+
+/// Checks if a the type implments the `Clone` interface.
+pub fn isClone(comptime T: type) InterfaceImplError {
+    comptime {
+        if (!@hasDecl(T, "clone")) {
+            return .{ .valid = false, .reason = .MissingRequiredMethod };
+        } else {
+            const info = @typeInfo(@TypeOf(@field(T, "clone")));
+            const num_args = info.Fn.params.len;
+            const arg_type = info.Fn.params[0].type.?;
+            const ret_type = info.Fn.return_type.?;
+            if (num_args != 1) {
+                return .{ .valid = false, .reason = .InvalidNumArgs };
+            } else if (arg_type != T) {
+                return .{ .valid = false, .reason = .InvalidArgType };
+            } else if (ret_type != T) {
+                return .{ .valid = false, .reason = .InvalidReturnType };
+            }
+        }
+        return .{ .valid = true };
+    }
+}
 
 /// An interface for a cloneable type.
 pub fn Clone(comptime Self: type) type {
-    comptime if (!@hasDecl(Self, "clone")) {
-        const tname = @typeName(Self);
-        @compileError("`clone(" ++ tname ++ ") " ++ tname ++ "` must be implemented by " ++ tname);
-    } else {
-        const info = @typeInfo(@TypeOf(@field(Self, "clone")));
-        const num_args = info.Fn.params.len;
-        const arg_type = info.Fn.params[0].type.?;
-        const ret_type = info.Fn.return_type.?;
-
-        if (num_args != 1) {
-            @compileError("The `clone` function must have only 1 parameter");
-        } else if (arg_type != Self) {
-            @compileError("The `clone` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
-        } else if (ret_type != Self) {
-            @compileError("The `clone` function must return `" ++ @typeName(Self) ++ "`");
+    comptime {
+        const impl = isClone(Self);
+        if (!impl.valid) {
+            const tname = @typeName(Self);
+            switch (impl.reason.?) {
+                .MissingRequiredMethod => {
+                    @compileError("`clone(" ++ tname ++ ") " ++ tname ++ "` must be implemented by " ++ tname);
+                },
+                .InvalidNumArgs => {
+                    @compileError("The `clone` function must have only 1 parameter");
+                },
+                .InvalidArgType => {
+                    @compileError("The `clone` function must have one parameter of type `*" ++ tname ++ "` or `*const " ++ tname ++ "`");
+                },
+                .InvalidReturnType => {
+                    @compileError("The `clone` function must return `" ++ tname ++ "`");
+                },
+            }
         }
-    };
+    }
 
     return struct {
         /// Performs copy-assignment from `src`.

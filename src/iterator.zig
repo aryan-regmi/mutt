@@ -1,60 +1,113 @@
 const std = @import("std");
 const testing = std.testing;
+const clone = @import("clone.zig");
+const InterfaceImplError = @import("common.zig").InterfaceImplError;
+const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+
+// TODO: Add overflow checks!
+
+/// Checks if a the type implments the `IntoIter` interface.
+pub fn isIntoIter(comptime T: type) InterfaceImplError {
+    comptime {
+        if (!@hasDecl(T, "iter")) {
+            return .{ .valid = false, .reason = .MissingRequiredMethod };
+        } else {
+            const info = @typeInfo(@TypeOf(@field(T, "iter")));
+            const num_args = info.Fn.params.len;
+            const arg_type = info.Fn.params[0].type.?;
+            if (num_args != 1) {
+                return .{ .valid = false, .reason = .InvalidNumArgs };
+            } else if (arg_type != *T) {
+                return .{ .valid = false, .reason = .InvalidArgType };
+            }
+        }
+        return .{ .valid = true };
+    }
+}
 
 /// An interface for types that can be turned into an `Iterator`.
 pub fn IntoIter(comptime Self: type, comptime Item: type) type {
-    comptime if (!@hasDecl(Self, "iter")) {
-        const self_type = @typeName(Self);
-        const item_type = @typeName(Item);
-        @compileError("`iter(*" ++ self_type ++ ") Iterator(" ++ self_type ++ ", " ++ item_type ++ ")" ++ "` must be implemented by " ++ self_type);
-    } else {
-        const info = @typeInfo(@TypeOf(@field(Self, "iter")));
-        const num_args = info.Fn.params.len;
-        const arg_type = info.Fn.params[0].type.?;
-
-        if (num_args != 1) {
-            @compileError("The `iter` function must have only 1 parameter");
-        } else if (arg_type != *Self) {
-            @compileError("The `iter` function must have one parameter of type `*" ++ @typeName(Self) ++ "`");
+    comptime {
+        const impl = isIntoIter(Self);
+        if (!impl.valid) {
+            const self_type = @typeName(Self);
+            const item_type = @typeName(Item);
+            switch (impl.reason.?) {
+                .MissingRequiredMethod => {
+                    @compileError("`iter(*" ++ self_type ++ ") Iterator(" ++ self_type ++ ", " ++ item_type ++ ")" ++ "` must be implemented by " ++ self_type);
+                },
+                .InvalidNumArgs => {
+                    @compileError("The `iter` function must have only 1 parameter");
+                },
+                .InvalidArgType => {
+                    @compileError("The `iter` function must have one parameter of type `*" ++ @typeName(Self) ++ "`");
+                },
+                else => unreachable,
+            }
         }
-    };
+    }
 
     return struct {};
 }
 
-/// An interface for iterable types.
-pub fn Iterator(comptime Self: type, comptime Item: type) type {
-    // NOTE: Abstract away interface checks to a separate function?
+/// Checks if a the type implments the `Iterator` interface.
+pub fn isIterator(comptime T: type) InterfaceImplError {
     comptime {
-        if (!@hasDecl(Self, "next")) {
-            @compileError("`next(*" ++ @typeName(Self) ++ ") ?" ++ @typeName(Item) ++ "` must be implemented by " ++ @typeName(Self));
+        if (!@hasDecl(T, "next")) {
+            return .{ .valid = false, .reason = .MissingRequiredMethod };
+        } else if (!@hasDecl(T, "ItemType")) {
+            return .{ .valid = false, .reason = .MissingRequiredType };
         } else {
-            const info = @typeInfo(@TypeOf(@field(Self, "next")));
+            const info = @typeInfo(@TypeOf(@field(T, "next")));
             const num_args = info.Fn.params.len;
             const arg_type = info.Fn.params[0].type.?;
             const ret_type = info.Fn.return_type.?;
-
             if (num_args != 1) {
-                @compileError("The `next` function must have only 1 parameter");
-            } else if ((arg_type != *Self) and (arg_type != *const Self)) {
-                @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
-            } else if (ret_type != ?Item) {
-                const err = blk: {
-                    switch (@typeInfo(Item)) {
-                        .Struct => {
-                            // Enumerator `Item` types are valid
-                            if ((@hasDecl(Item, "ItemType")) and (Item == IndexedItem(Item.ItemType))) {
-                                break :blk false;
-                            }
-                        },
-                        else => {
-                            break :blk true;
-                        },
-                    }
-                };
-                if (err) {
-                    @compileError("The `next` function must return a `?" ++ @typeName(Item) ++ "`" ++ " (returns `" ++ @typeName(ret_type) ++ "`)");
+                return .{ .valid = false, .reason = .InvalidNumArgs };
+            } else if ((arg_type != *T) and (arg_type != *const T)) {
+                return .{ .valid = false, .reason = .InvalidArgType };
+            } else if (ret_type != ?T.ItemType) {
+                switch (@typeInfo(T.ItemType)) {
+                    .Struct => {
+                        // Enumerator `Item` types are valid
+                        if ((@hasDecl(T.ItemType, "ItemType")) and (T.ItemType == IndexedItem(T.ItemType.ItemType))) {
+                            return .{ .valid = true };
+                        }
+                    },
+                    else => {
+                        return .{ .valid = false, .reason = .InvalidReturnType };
+                    },
                 }
+            }
+        }
+        return .{ .valid = true };
+    }
+}
+
+/// An interface for iterable types.
+pub fn Iterator(comptime Self: type, comptime Item: type) type {
+    comptime {
+        const impl = isIterator(Self);
+        if (!impl.valid) {
+            const self_type = @typeName(Self);
+            const item_type = @typeName(Item);
+            switch (impl.reason.?) {
+                .MissingRequiredMethod => {
+                    @compileError("`next(*" ++ self_type ++ ") ?" ++ item_type ++ "` must be implemented by " ++ self_type);
+                },
+                .MissingRequiredType => {
+                    @compileError("`pub const ItemType` must be provided by " ++ self_type);
+                },
+                .InvalidNumArgs => {
+                    @compileError("The `next` function must have only 1 parameter");
+                },
+                .InvalidArgType => {
+                    @compileError("The `next` function must have one parameter of type `*" ++ self_type ++ "` or `*const " ++ self_type ++ "`");
+                },
+                .InvalidReturnType => {
+                    @compileError("The `next` function must return a `?" ++ item_type ++ "`");
+                },
             }
         }
     }
@@ -106,6 +159,19 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             }
             return null;
         }
+
+        // TODO: Check if value needs to be cloned?
+        //
+        /// Transforms the iterator into an `ArrayList(Item)`.
+        pub fn collect(self: *Self, allocator: Allocator) ArrayList(Item) {
+            var collection = ArrayList(Item).init(allocator);
+            while (self.next()) |v| {
+                collection.append(v);
+            }
+            return collection;
+        }
+
+        // pub fn cloned(self: *Self) !void {}
     };
 }
 
@@ -145,6 +211,26 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
     };
 }
 
+pub fn Cloned(comptime Self: type, comptime Item: type) type {
+    comptime if (!clone.isClone(Item)) {
+        @compileError("`" ++ @typeName(Item) ++ "` must implement the `Clone` interface");
+    };
+
+    return struct {
+        it: *Self,
+
+        pub usingnamespace Iterator(Self, Item);
+
+        pub fn next(self: *@This()) ?Item {
+            const val = self.it.next();
+            if (val != null) {
+                return val.clone();
+            }
+            return null;
+        }
+    };
+}
+
 const TestIter = struct {
     const Container = struct {
         const Self = @This();
@@ -157,10 +243,11 @@ const TestIter = struct {
             container: *Self,
             idx: usize = 0,
 
-            pub usingnamespace Iterator(Iter, Item);
+            pub const ItemType = Item;
+            pub usingnamespace Iterator(Iter, ItemType);
 
             /// Returns the next item in the iterator.
-            pub fn next(self: *Iter) ?Item {
+            pub fn next(self: *Iter) ?ItemType {
                 if (self.idx < self.container.data.len) {
                     self.idx += 1;
                     return &self.container.data[self.idx - 1];
