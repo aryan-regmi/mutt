@@ -1,4 +1,4 @@
-pub const Iterable = @import("iterable.zig").Iterator;
+pub const Iterable = @import("iterable.zig");
 pub const Cloneable = @import("cloneable.zig").Clone;
 
 test {

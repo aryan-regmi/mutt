@@ -26,6 +26,7 @@ pub fn IntoIter(comptime Self: type, comptime Item: type) type {
 
 /// An interface for iterable types.
 pub fn Iterator(comptime Self: type, comptime Item: type) type {
+    // NOTE: Abstract away interface checks to a separate function?
     comptime if (!@hasDecl(Self, "next")) {
         const self_type = @typeName(Self);
         const item_type = @typeName(Item);
@@ -40,8 +41,25 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             @compileError("The `next` function must have only 1 parameter");
         } else if ((arg_type != *Self) and (arg_type != *const Self)) {
             @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
-        } else if ((ret_type != ?Item) and (ret_type != ?Enumerator(Self, Item).Tuple)) {
-            @compileError("The `next` function must return a `?" ++ @typeName(Item) ++ "`" ++ " (returns `" ++ @typeName(ret_type) ++ "`)");
+        } else if (ret_type != ?Item) {
+            switch (@typeInfo(Item)) {
+                .Struct => {
+                    const inner_info = @typeInfo(@TypeOf(@field(Enumerator(Self, Item.ItemType), "next")));
+                    const inner_num_args = inner_info.Fn.params.len;
+                    const inner_arg_type = inner_info.Fn.params[0].type.?;
+                    const inner_ret_type = inner_info.Fn.return_type.?;
+                    if (inner_num_args != 1) {
+                        @compileError("The `next` function must have only 1 parameter");
+                    } else if (inner_arg_type != *Enumerator(Self, Item.ItemType)) {
+                        @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Enumerator(Self, Item.ItemType)));
+                    } else if (inner_ret_type != ?IndexedItem(Item.ItemType)) {
+                        @compileError("The `next` function must return a `?" ++ @typeName(IndexedItem(Item.ItemType)) ++ "`" ++ " (returns `" ++ @typeName(inner_ret_type) ++ "`)");
+                    }
+                },
+                else => {
+                    @compileError("The `next` function must return a `?" ++ @typeName(Item) ++ "`" ++ " (returns `" ++ @typeName(ret_type) ++ "`)");
+                },
+            }
         }
     };
 
@@ -57,17 +75,13 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
     };
 }
 
-pub fn IndexItem(comptime Item: type) type {
+pub fn IndexedItem(comptime Item: type) type {
     return struct {
+        pub const ItemType = Item;
         idx: usize,
         val: Item,
     };
 }
-
-// pub const IndexItem = struct {
-//     idx: usize,
-//     item: Item
-// };
 
 /// An iterator that returns the current count and the element.
 pub fn Enumerator(comptime Self: type, comptime Item: type) type {
@@ -75,13 +89,14 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
         it: *anyopaque,
         count: usize = 0,
 
-        pub usingnamespace Iterator(Self, Tuple);
+        pub usingnamespace Iterator(Self, IndexedItem(Item));
         pub const Tuple = struct {
+            pub const ItemType = Item;
             idx: usize,
             val: Item,
         };
 
-        pub fn next(self: *@This()) ?Tuple {
+        pub fn next(self: *@This()) ?IndexedItem(Item) {
             var actual_iter: *Self = @ptrCast(@alignCast(self.it));
             const val = actual_iter.next();
             if (val != null) {
