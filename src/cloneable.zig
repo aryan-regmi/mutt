@@ -3,6 +3,7 @@ const testing = std.testing;
 
 /// An interface for a cloneable type.
 pub fn Clone(comptime Self: type) type {
+    // FIXME: Check function signature
     comptime if (!@hasDecl(Self, "clone")) {
         const tname = @typeName(Self);
         @compileError("`clone(" ++ tname ++ ") " ++ tname ++ "` must be implemented by " ++ tname);

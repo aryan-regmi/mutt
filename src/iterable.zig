@@ -82,7 +82,7 @@ pub fn IndexedItem(comptime Item: type) type {
 /// An iterator that returns the current count and the element.
 pub fn Enumerator(comptime Self: type, comptime Item: type) type {
     return struct {
-        it: *anyopaque,
+        it: *Self,
         count: usize = 0,
 
         pub usingnamespace Iterator(Self, IndexedItem(Item));
@@ -93,8 +93,7 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
         };
 
         pub fn next(self: *@This()) ?IndexedItem(Item) {
-            var actual_iter: *Self = @ptrCast(@alignCast(self.it));
-            const val = actual_iter.next();
+            const val = self.it.next();
             if (val != null) {
                 self.count += 1;
                 const out = .{ .idx = self.count - 1, .val = val.? };
