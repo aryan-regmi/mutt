@@ -3,10 +3,22 @@ const testing = std.testing;
 
 /// An interface for a cloneable type.
 pub fn Clone(comptime Self: type) type {
-    // FIXME: Check function signature
     comptime if (!@hasDecl(Self, "clone")) {
         const tname = @typeName(Self);
         @compileError("`clone(" ++ tname ++ ") " ++ tname ++ "` must be implemented by " ++ tname);
+    } else {
+        const info = @typeInfo(@TypeOf(@field(Self, "clone")));
+        const num_args = info.Fn.params.len;
+        const arg_type = info.Fn.params[0].type.?;
+        const ret_type = info.Fn.return_type.?;
+
+        if (num_args != 1) {
+            @compileError("The `clone` function must have only 1 parameter");
+        } else if (arg_type != Self) {
+            @compileError("The `clone` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
+        } else if (ret_type != Self) {
+            @compileError("The `clone` function must return `" ++ @typeName(Self) ++ "`");
+        }
     };
 
     return struct {
