@@ -1,8 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
 
-// TODO: Use builtin reflection functions to check function signatures!
-
 /// An interface for types that can be turned into an `Iterator`.
 pub fn IntoIter(comptime Self: type, comptime Item: type) type {
     comptime if (!@hasDecl(Self, "iter")) {
@@ -27,41 +25,39 @@ pub fn IntoIter(comptime Self: type, comptime Item: type) type {
 /// An interface for iterable types.
 pub fn Iterator(comptime Self: type, comptime Item: type) type {
     // NOTE: Abstract away interface checks to a separate function?
-    comptime if (!@hasDecl(Self, "next")) {
-        const self_type = @typeName(Self);
-        const item_type = @typeName(Item);
-        @compileError("`next(*" ++ self_type ++ ") ?" ++ item_type ++ "` must be implemented by " ++ self_type);
-    } else {
-        const info = @typeInfo(@TypeOf(@field(Self, "next")));
-        const num_args = info.Fn.params.len;
-        const arg_type = info.Fn.params[0].type.?;
-        const ret_type = info.Fn.return_type.?;
+    comptime {
+        if (!@hasDecl(Self, "next")) {
+            @compileError("`next(*" ++ @typeName(Self) ++ ") ?" ++ @typeName(Item) ++ "` must be implemented by " ++ @typeName(Self));
+        } else {
+            const info = @typeInfo(@TypeOf(@field(Self, "next")));
+            const num_args = info.Fn.params.len;
+            const arg_type = info.Fn.params[0].type.?;
+            const ret_type = info.Fn.return_type.?;
 
-        if (num_args != 1) {
-            @compileError("The `next` function must have only 1 parameter");
-        } else if ((arg_type != *Self) and (arg_type != *const Self)) {
-            @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
-        } else if (ret_type != ?Item) {
-            switch (@typeInfo(Item)) {
-                .Struct => {
-                    const inner_info = @typeInfo(@TypeOf(@field(Enumerator(Self, Item.ItemType), "next")));
-                    const inner_num_args = inner_info.Fn.params.len;
-                    const inner_arg_type = inner_info.Fn.params[0].type.?;
-                    const inner_ret_type = inner_info.Fn.return_type.?;
-                    if (inner_num_args != 1) {
-                        @compileError("The `next` function must have only 1 parameter");
-                    } else if (inner_arg_type != *Enumerator(Self, Item.ItemType)) {
-                        @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Enumerator(Self, Item.ItemType)));
-                    } else if (inner_ret_type != ?IndexedItem(Item.ItemType)) {
-                        @compileError("The `next` function must return a `?" ++ @typeName(IndexedItem(Item.ItemType)) ++ "`" ++ " (returns `" ++ @typeName(inner_ret_type) ++ "`)");
-                    }
-                },
-                else => {
+            if (num_args != 1) {
+                @compileError("The `next` function must have only 1 parameter");
+            } else if ((arg_type != *Self) and (arg_type != *const Self)) {
+                @compileError("The `next` function must have one parameter of type `*" ++ @typeName(Self) ++ "` or `*const " ++ @typeName(Self) ++ "`");
+            } else if (ret_type != ?Item) {
+                var err = true;
+                switch (@typeInfo(Item)) {
+                    .Struct => {
+                        // Enumerator `Item` types are valid
+                        if ((@hasDecl(Item, "ItemType")) and (Item == IndexedItem(Item.ItemType))) {
+                            err = false;
+                        }
+                    },
+
+                    else => {
+                        err = true;
+                    },
+                }
+                if (err) {
                     @compileError("The `next` function must return a `?" ++ @typeName(Item) ++ "`" ++ " (returns `" ++ @typeName(ret_type) ++ "`)");
-                },
+                }
             }
         }
-    };
+    }
 
     return struct {
         /// Creates an iterator that tracks the current iteration count as well as the next value.
