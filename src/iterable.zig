@@ -68,9 +68,50 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         pub fn enumerate(self: *const Self) Enumerator(Self, Item) {
             return Enumerator(Self, Item){ .it = @constCast(self) };
         }
+
+        /// Returns `true` if *every* element of the iterator matches the predicate.
+        ///
+        /// This is short-circuiting; it will return early if the predicate
+        /// returns `false` for any item.
+        pub fn all(self: *Self, predicate: fn (Item) bool) bool {
+            while (self.next()) |v| {
+                if (predicate(v) == false) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// Returns `true` if *any* element of the iterator matches the predicate.
+        ///
+        /// This is short-circuiting; it will return early if the predicate
+        /// returns `true` for any item.
+        pub fn any(self: *Self, predicate: fn (Item) bool) bool {
+            while (self.next()) |v| {
+                if (predicate(v) == true) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// Returns the first element of the iterator that matches the predicate.
+        ///
+        /// If nothing matches, `null` is returned.
+        pub fn find(self: *Self, predicate: fn (Item) bool) ?Item {
+            while (self.next()) |v| {
+                if (predicate(v) == true) {
+                    return v;
+                }
+            }
+            return null;
+        }
     };
 }
 
+/// The type returned by an `Enumerator`.
+///
+/// It keeps track of the iteration count of the value.
 pub fn IndexedItem(comptime Item: type) type {
     return struct {
         pub const ItemType = Item;
@@ -104,7 +145,7 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
     };
 }
 
-test "Create Iterable" {
+const TestIter = struct {
     const Container = struct {
         const Self = @This();
         const Item = *u8;
@@ -133,10 +174,12 @@ test "Create Iterable" {
             return .{ .container = self };
         }
     };
+};
 
+test "Create Iterable" {
     const original_data = [_]u8{ 1, 2, 3, 4, 5 };
     var data = [_]u8{ 1, 2, 3, 4, 5 };
-    var container = Container{ .data = &data };
+    var container = TestIter.Container{ .data = &data };
 
     var iter = container.iter();
     while (iter.next()) |v| {
