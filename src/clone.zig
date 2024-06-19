@@ -5,20 +5,25 @@ const InterfaceImplError = @import("common.zig").InterfaceImplError;
 /// Checks if a the type implments the `Clone` interface.
 pub fn isClone(comptime T: type) InterfaceImplError {
     comptime {
-        if (!@hasDecl(T, "clone")) {
-            return .{ .valid = false, .reason = .MissingRequiredMethod };
-        } else {
-            const info = @typeInfo(@TypeOf(@field(T, "clone")));
-            const num_args = info.Fn.params.len;
-            const arg_type = info.Fn.params[0].type.?;
-            const ret_type = info.Fn.return_type.?;
-            if (num_args != 1) {
-                return .{ .valid = false, .reason = .InvalidNumArgs };
-            } else if (arg_type != T) {
-                return .{ .valid = false, .reason = .InvalidArgType };
-            } else if (ret_type != T) {
-                return .{ .valid = false, .reason = .InvalidReturnType };
+        const tinfo = @typeInfo(T);
+        if ((tinfo == .Struct) or (tinfo == .Union)) {
+            if (!@hasDecl(T, "clone")) {
+                return .{ .valid = false, .reason = .MissingRequiredMethod };
+            } else {
+                const info = @typeInfo(@TypeOf(@field(T, "clone")));
+                const num_args = info.Fn.params.len;
+                const arg_type = info.Fn.params[0].type.?;
+                const ret_type = info.Fn.return_type.?;
+                if (num_args != 1) {
+                    return .{ .valid = false, .reason = .InvalidNumArgs };
+                } else if (arg_type != T) {
+                    return .{ .valid = false, .reason = .InvalidArgType };
+                } else if (ret_type != T) {
+                    return .{ .valid = false, .reason = .InvalidReturnType };
+                }
             }
+        } else {
+            return .{ .valid = false, .reason = .MissingRequiredMethod };
         }
         return .{ .valid = true };
     }

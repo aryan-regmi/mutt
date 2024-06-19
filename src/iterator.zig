@@ -10,17 +10,22 @@ const ArrayList = std.ArrayList;
 /// Checks if a the type implments the `IntoIter` interface.
 pub fn isIntoIter(comptime T: type) InterfaceImplError {
     comptime {
-        if (!@hasDecl(T, "iter")) {
-            return .{ .valid = false, .reason = .MissingRequiredMethod };
-        } else {
-            const info = @typeInfo(@TypeOf(@field(T, "iter")));
-            const num_args = info.Fn.params.len;
-            const arg_type = info.Fn.params[0].type.?;
-            if (num_args != 1) {
-                return .{ .valid = false, .reason = .InvalidNumArgs };
-            } else if (arg_type != *T) {
-                return .{ .valid = false, .reason = .InvalidArgType };
+        const tinfo = @typeInfo(T);
+        if ((tinfo == .Struct) or (tinfo == .Union)) {
+            if (!@hasDecl(T, "iter")) {
+                return .{ .valid = false, .reason = .MissingRequiredMethod };
+            } else {
+                const info = @typeInfo(@TypeOf(@field(T, "iter")));
+                const num_args = info.Fn.params.len;
+                const arg_type = info.Fn.params[0].type.?;
+                if (num_args != 1) {
+                    return .{ .valid = false, .reason = .InvalidNumArgs };
+                } else if (arg_type != *T) {
+                    return .{ .valid = false, .reason = .InvalidArgType };
+                }
             }
+        } else {
+            return .{ .valid = false, .reason = .MissingRequiredMethod };
         }
         return .{ .valid = true };
     }
@@ -54,32 +59,37 @@ pub fn IntoIter(comptime Self: type, comptime Item: type) type {
 /// Checks if a the type implments the `Iterator` interface.
 pub fn isIterator(comptime T: type) InterfaceImplError {
     comptime {
-        if (!@hasDecl(T, "next")) {
-            return .{ .valid = false, .reason = .MissingRequiredMethod };
-        } else if (!@hasDecl(T, "ItemType")) {
-            return .{ .valid = false, .reason = .MissingRequiredType };
-        } else {
-            const info = @typeInfo(@TypeOf(@field(T, "next")));
-            const num_args = info.Fn.params.len;
-            const arg_type = info.Fn.params[0].type.?;
-            const ret_type = info.Fn.return_type.?;
-            if (num_args != 1) {
-                return .{ .valid = false, .reason = .InvalidNumArgs };
-            } else if ((arg_type != *T) and (arg_type != *const T)) {
-                return .{ .valid = false, .reason = .InvalidArgType };
-            } else if (ret_type != ?T.ItemType) {
-                switch (@typeInfo(T.ItemType)) {
-                    .Struct => {
-                        // Enumerator `Item` types are valid
-                        if ((@hasDecl(T.ItemType, "ItemType")) and (T.ItemType == IndexedItem(T.ItemType.ItemType))) {
-                            return .{ .valid = true };
-                        }
-                    },
-                    else => {
-                        return .{ .valid = false, .reason = .InvalidReturnType };
-                    },
+        const tinfo = @typeInfo(T);
+        if ((tinfo == .Struct) or (tinfo == .Union)) {
+            if (!@hasDecl(T, "next")) {
+                return .{ .valid = false, .reason = .MissingRequiredMethod };
+            } else if (!@hasDecl(T, "ItemType")) {
+                return .{ .valid = false, .reason = .MissingRequiredType };
+            } else {
+                const info = @typeInfo(@TypeOf(@field(T, "next")));
+                const num_args = info.Fn.params.len;
+                const arg_type = info.Fn.params[0].type.?;
+                const ret_type = info.Fn.return_type.?;
+                if (num_args != 1) {
+                    return .{ .valid = false, .reason = .InvalidNumArgs };
+                } else if ((arg_type != *T) and (arg_type != *const T)) {
+                    return .{ .valid = false, .reason = .InvalidArgType };
+                } else if (ret_type != ?T.ItemType) {
+                    switch (@typeInfo(T.ItemType)) {
+                        .Struct => {
+                            // Enumerator `Item` types are valid
+                            if ((@hasDecl(T.ItemType, "ItemType")) and (T.ItemType == IndexedItem(T.ItemType.ItemType))) {
+                                return .{ .valid = true };
+                            }
+                        },
+                        else => {
+                            return .{ .valid = false, .reason = .InvalidReturnType };
+                        },
+                    }
                 }
             }
+        } else {
+            return .{ .valid = false, .reason = .MissingRequiredMethod };
         }
         return .{ .valid = true };
     }
@@ -171,7 +181,10 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             return collection;
         }
 
-        // pub fn cloned(self: *Self) !void {}
+        /// Creates an iterator that clones all of its elements.
+        pub fn cloned(self: *const Self) Cloned(Self, Item) {
+            return Cloned(Self, Item){ .it = @constCast(self) };
+        }
     };
 }
 
@@ -212,9 +225,12 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
 }
 
 pub fn Cloned(comptime Self: type, comptime Item: type) type {
-    comptime if (!clone.isClone(Item)) {
-        @compileError("`" ++ @typeName(Item) ++ "` must implement the `Clone` interface");
-    };
+    comptime {
+        const impl = clone.isClone(Item);
+        if (!impl.valid) {
+            @compileError("`" ++ @typeName(Item) ++ "` must implement the `Clone` interface");
+        }
+    }
 
     return struct {
         it: *Self,
