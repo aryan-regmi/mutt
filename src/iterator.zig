@@ -140,7 +140,7 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         ///
         /// This is short-circuiting; it will return early if the predicate
         /// returns `false` for any item.
-        pub fn all(self: *Self, predicate: fn (Item) bool) bool {
+        pub fn all(self: *Self, predicate: *const fn (Item) bool) bool {
             while (self.next()) |v| {
                 if (predicate(v) == false) {
                     return false;
@@ -153,7 +153,7 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         ///
         /// This is short-circuiting; it will return early if the predicate
         /// returns `true` for any item.
-        pub fn any(self: *Self, predicate: fn (Item) bool) bool {
+        pub fn any(self: *Self, predicate: *const fn (Item) bool) bool {
             while (self.next()) |v| {
                 if (predicate(v) == true) {
                     return true;
@@ -165,7 +165,7 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         /// Returns the first element of the iterator that matches the predicate.
         ///
         /// If nothing matches, `null` is returned.
-        pub fn find(self: *Self, predicate: fn (Item) bool) ?Item {
+        pub fn find(self: *Self, predicate: *const fn (Item) bool) ?Item {
             while (self.next()) |v| {
                 if (predicate(v) == true) {
                     return v;
@@ -177,7 +177,7 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         /// Returns the index of the first element that matches the predicate.
         ///
         /// If nothing matches, `null` is returned.
-        pub fn findPos(self: *Self, predicate: fn (Item) bool) ?usize {
+        pub fn findPos(self: *Self, predicate: *const fn (Item) bool) ?usize {
             var pos: usize = 0;
             while (self.next()) |v| {
                 if (predicate(v) == true) {
@@ -212,6 +212,11 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             }
             return cnt;
         }
+
+        // TODO: Add `filter` function & `Filter` type
+        pub fn filter(self: *const Self, predicate: *const fn (Item) bool) Filter(Self, Item) {
+            return Filter(Self, Item){ .it = @constCast(self), .predicate = predicate };
+        }
     };
 }
 
@@ -240,14 +245,14 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
         it: *Self,
         count: usize = 0,
 
-        pub usingnamespace Iterator(@This(), IndexedItem(Item));
+        pub usingnamespace Iterator(@This(), ItemType);
         pub const Tuple = struct {
             pub const ItemType = Item;
             idx: usize,
             val: Item,
         };
 
-        pub fn next(self: *@This()) ?IndexedItem(Item) {
+        pub fn next(self: *@This()) ?ItemType {
             const val = self.it.next();
             if (val != null) {
                 self.count += 1;
@@ -279,6 +284,20 @@ pub fn Cloned(comptime Self: type, comptime Item: type) type {
                 return val.?.clone();
             }
             return null;
+        }
+    };
+}
+
+pub fn Filter(comptime Self: type, comptime Item: type) type {
+    return struct {
+        pub const ItemType = Item;
+        it: *Self,
+        predicate: *const fn (Item) bool,
+
+        pub usingnamespace Iterator(@This(), Item);
+
+        pub fn next(self: *@This()) ?ItemType {
+            return self.it.find(self.predicate);
         }
     };
 }
@@ -429,8 +448,17 @@ test "Filter iterator" {
 
     // Find pos
     {
+        defer container.resetIter(&it);
         const found_pos = it.findPos(gt3);
         try testing.expectEqual(3, found_pos);
+    }
+
+    // Filter
+    {
+        var filtered = it.filter(gt3);
+        try testing.expectEqual(4, filtered.next().?.*);
+        try testing.expectEqual(5, filtered.next().?.*);
+        try testing.expectEqual(null, filtered.next());
     }
 }
 
