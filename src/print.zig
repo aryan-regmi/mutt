@@ -1,30 +1,7 @@
 const std = @import("std");
+const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const InterfaceImplError = @import("common.zig").InterfaceImplError;
-
-// /// Checks if a the type implments the `IntoIter` interface.
-// pub fn isIntoIter(comptime T: type) InterfaceImplError {
-//     comptime {
-//         const tinfo = @typeInfo(T);
-//         if ((tinfo == .Struct) or (tinfo == .Union)) {
-//             if (!@hasDecl(T, "iter")) {
-//                 return .{ .valid = false, .reason = .MissingRequiredMethod };
-//             } else {
-//                 const info = @typeInfo(@TypeOf(@field(T, "iter")));
-//                 const num_args = info.Fn.params.len;
-//                 const arg_type = info.Fn.params[0].type.?;
-//                 if (num_args != 1) {
-//                     return .{ .valid = false, .reason = .InvalidNumArgs };
-//                 } else if (arg_type != *T) {
-//                     return .{ .valid = false, .reason = .InvalidArgType };
-//                 }
-//             }
-//         } else {
-//             return .{ .valid = false, .reason = .MissingRequiredMethod };
-//         }
-//         return .{ .valid = true };
-//     }
-// }
 
 pub fn isPrintable(comptime T: type) InterfaceImplError {
     comptime {
@@ -61,10 +38,10 @@ pub fn Printable(comptime Self: type) type {
         if (!impl.valid) {
             const tname = @typeName(Self);
             switch (impl.reason.?) {
-                .MissingRequiredMethod => @compileError("`writeToBuf(*" ++ tname ++ ", []u8) ![]u8` must be implemented by `" ++ tname ++ "`"),
+                .MissingRequiredMethod => @compileError("`writeToBuf(*" ++ tname ++ ", []u8) anyerror![]u8` must be implemented by `" ++ tname ++ "`"),
                 .InvalidNumArgs => @compileError("`writeToBuf` must have 2 parameters"),
                 .InvalidArgType => @compileError("`writeToBuf` must have parameters of the following types: \n\t-- *" ++ tname ++ "\n\t-- []u8"),
-                .InvalidReturnType => @compileError("`writeToBuf` must return `![u8]`"),
+                .InvalidReturnType => @compileError("`writeToBuf` must return `anyerror![u8]`"),
                 else => unreachable,
             }
         }
@@ -103,6 +80,5 @@ test "Create printable type" {
     };
 
     var val = TstPrint{ .data = 42 };
-    val.debug(std.testing.allocator);
+    val.debug(testing.allocator);
 }
-

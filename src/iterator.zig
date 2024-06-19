@@ -20,7 +20,7 @@ pub fn isIntoIter(comptime T: type) InterfaceImplError {
                 const arg_type = info.Fn.params[0].type.?;
                 if (num_args != 1) {
                     return .{ .valid = false, .reason = .InvalidNumArgs };
-                } else if (arg_type != *T) {
+                } else if ((arg_type != *T) and (arg_type != *const T)) {
                     return .{ .valid = false, .reason = .InvalidArgType };
                 }
             }
@@ -39,15 +39,9 @@ pub fn IntoIter(comptime Self: type, comptime Item: type) type {
             const self_type = @typeName(Self);
             const item_type = @typeName(Item);
             switch (impl.reason.?) {
-                .MissingRequiredMethod => {
-                    @compileError("`iter(*" ++ self_type ++ ") Iterator(" ++ self_type ++ ", " ++ item_type ++ ")" ++ "` must be implemented by " ++ self_type);
-                },
-                .InvalidNumArgs => {
-                    @compileError("The `iter` function must have only 1 parameter");
-                },
-                .InvalidArgType => {
-                    @compileError("The `iter` function must have one parameter of type `*" ++ @typeName(Self) ++ "`");
-                },
+                .MissingRequiredMethod => @compileError("`iter(*" ++ self_type ++ ") Iterator(" ++ self_type ++ ", " ++ item_type ++ ")" ++ "` must be implemented by " ++ self_type),
+                .InvalidNumArgs => @compileError("The `iter` function must have only 1 parameter"),
+                .InvalidArgType => @compileError("The `iter` function must have one parameter of type `*" ++ @typeName(Self) ++ "`"),
                 else => unreachable,
             }
         }
@@ -123,21 +117,11 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             const self_type = @typeName(Self);
             const item_type = @typeName(Item);
             switch (impl.reason.?) {
-                .MissingRequiredMethod => {
-                    @compileError("`next(*" ++ self_type ++ ") ?" ++ item_type ++ "` must be implemented by " ++ self_type);
-                },
-                .MissingRequiredType => {
-                    @compileError("`pub const ItemType` must be provided by " ++ self_type);
-                },
-                .InvalidNumArgs => {
-                    @compileError("The `next` function must have only 1 parameter");
-                },
-                .InvalidArgType => {
-                    @compileError("The `next` function must have one parameter of type `*" ++ self_type ++ "` or `*const " ++ self_type ++ "`");
-                },
-                .InvalidReturnType => {
-                    @compileError("The `next` function must return a `?" ++ item_type ++ "`");
-                },
+                .MissingRequiredMethod => @compileError("`next(*" ++ self_type ++ ") ?" ++ item_type ++ "` must be implemented by " ++ self_type),
+                .MissingRequiredType => @compileError("`pub const ItemType` must be provided by " ++ self_type),
+                .InvalidNumArgs => @compileError("The `next` function must have only 1 parameter"),
+                .InvalidArgType => @compileError("The `next` function must have one parameter of type `*" ++ self_type ++ "` or `*const " ++ self_type ++ "`"),
+                .InvalidReturnType => @compileError("The `next` function must return a `?" ++ item_type ++ "`"),
             }
         }
     }
