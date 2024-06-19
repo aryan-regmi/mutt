@@ -53,7 +53,27 @@ pub fn IntoIter(comptime Self: type, comptime Item: type) type {
         }
     }
 
-    return struct {};
+    return struct {
+        /// Resets the given iterator.
+        pub fn resetIter(self: *Self, it: anytype) void {
+            comptime {
+                const info = @typeInfo(@TypeOf(it));
+                switch (info) {
+                    .Pointer => {
+                        const impl = isIterator(info.Pointer.child);
+                        if (!impl.valid) {
+                            @compileError("`it` must be a valid `Iterator`");
+                        }
+                    },
+                    else => {
+                        @compileError("`it` must be a pointer to a valid `Iterator`");
+                    },
+                }
+            }
+
+            it.* = self.iter();
+        }
+    };
 }
 
 /// Checks if a the type implments the `Iterator` interface.
@@ -364,4 +384,38 @@ test "Cloneable iterator" {
     while (it.next()) |v| {
         try testing.expectEqual(original_data[v.idx].data * 2, v.val.data);
     }
+}
+
+test "Filter iterator" {
+    const gt3 = struct {
+        fn gt3(v: *u8) bool {
+            if (v.* > 3) {
+                return true;
+            }
+            return false;
+        }
+    }.gt3;
+    const gt0 = struct {
+        pub fn gt0(v: *u8) bool {
+            if (v.* > 0) {
+                return true;
+            }
+            return false;
+        }
+    }.gt0;
+
+    var data = [_]u8{ 1, 2, 3, 4, 5 };
+    var container = TestIter.Container{ .data = &data };
+
+    var it = container.iter();
+    const any = it.any(gt3);
+    try testing.expect(any);
+
+    container.resetIter(&it);
+    const all = it.all(gt0);
+    try testing.expect(all);
+
+    container.resetIter(&it);
+    const found = it.find(gt3);
+    try testing.expectEqual(4, found.?.*);
 }
