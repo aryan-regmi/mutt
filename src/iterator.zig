@@ -218,6 +218,10 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             return Filter(Self, Item){ .it = @constCast(self), .predicate = predicate };
         }
 
+        /// Creates an iterator that steps by the given amount each iteration.
+        ///
+        /// # Note
+        /// The first element will always be returned, regardless of the step.
         pub fn stepBy(self: *const Self, step: usize) StepBy(Self, Item) {
             return StepBy(Self, Item){ .it = @constCast(self), .step = step };
         }
@@ -268,6 +272,7 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
     };
 }
 
+/// An iterator that clones the elements of the underlying iterator.
 pub fn Cloned(comptime Self: type, comptime Item: type) type {
     comptime {
         const impl = cloneable.isClone(Item);
@@ -292,6 +297,7 @@ pub fn Cloned(comptime Self: type, comptime Item: type) type {
     };
 }
 
+/// An iterator that filters the elements of the underlying iterator with a predicate.
 pub fn Filter(comptime Self: type, comptime Item: type) type {
     return struct {
         pub const ItemType = Item;
@@ -306,6 +312,7 @@ pub fn Filter(comptime Self: type, comptime Item: type) type {
     };
 }
 
+/// An iterator that steps through the underlying iterator by a custom amount.
 pub fn StepBy(comptime Self: type, comptime Item: type) type {
     return struct {
         pub const ItemType = Item;
