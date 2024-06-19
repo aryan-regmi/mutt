@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const clone = @import("clone.zig");
+const cloneable = @import("clone.zig");
 const InterfaceImplError = @import("common.zig").InterfaceImplError;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -170,8 +170,6 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             return null;
         }
 
-        // TODO: Check if value needs to be cloned?
-        //
         /// Transforms the iterator into an `ArrayList(Item)`.
         pub fn collect(self: *Self, allocator: Allocator) ArrayList(Item) {
             var collection = ArrayList(Item).init(allocator);
@@ -193,19 +191,27 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
 /// It keeps track of the iteration count of the value.
 pub fn IndexedItem(comptime Item: type) type {
     return struct {
+        const II = @This();
         pub const ItemType = Item;
         idx: usize,
         val: Item,
+
+        pub usingnamespace if (cloneable.isClone(Item).valid) struct {
+            pub fn clone(self: II) II {
+                return .{ .idx = self.idx, .val = self.val.clone() };
+            }
+        } else struct {};
     };
 }
 
 /// An iterator that returns the current count and the element.
 pub fn Enumerator(comptime Self: type, comptime Item: type) type {
     return struct {
+        pub const ItemType = IndexedItem(Item);
         it: *Self,
         count: usize = 0,
 
-        pub usingnamespace Iterator(Self, IndexedItem(Item));
+        pub usingnamespace Iterator(@This(), IndexedItem(Item));
         pub const Tuple = struct {
             pub const ItemType = Item;
             idx: usize,
@@ -226,21 +232,22 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
 
 pub fn Cloned(comptime Self: type, comptime Item: type) type {
     comptime {
-        const impl = clone.isClone(Item);
+        const impl = cloneable.isClone(Item);
         if (!impl.valid) {
             @compileError("`" ++ @typeName(Item) ++ "` must implement the `Clone` interface");
         }
     }
 
     return struct {
+        pub const ItemType = Item;
         it: *Self,
 
-        pub usingnamespace Iterator(Self, Item);
+        pub usingnamespace Iterator(@This(), Item);
 
         pub fn next(self: *@This()) ?Item {
             const val = self.it.next();
             if (val != null) {
-                return val.clone();
+                return val.?.clone();
             }
             return null;
         }
@@ -277,6 +284,44 @@ const TestIter = struct {
             return .{ .container = self };
         }
     };
+
+    const CloneableContainer = struct {
+        const Self = @This();
+        const Item = CloneItem;
+        data: []CloneItem,
+
+        pub const CloneItem = struct {
+            data: usize,
+
+            pub usingnamespace cloneable.Clone(CloneItem);
+
+            pub fn clone(self: CloneItem) CloneItem {
+                return .{ .data = self.data * 2 };
+            }
+        };
+
+        pub usingnamespace IntoIter(Self, Item);
+
+        pub const Iter = struct {
+            container: *Self,
+            idx: usize = 0,
+
+            pub const ItemType = Item;
+            pub usingnamespace Iterator(Iter, ItemType);
+
+            pub fn next(self: *Iter) ?ItemType {
+                if (self.idx < self.container.data.len) {
+                    self.idx += 1;
+                    return self.container.data[self.idx - 1];
+                }
+                return null;
+            }
+        };
+
+        pub fn iter(self: *Self) Iter {
+            return .{ .container = self };
+        }
+    };
 };
 
 test "Create Iterable" {
@@ -293,5 +338,17 @@ test "Create Iterable" {
     while (en.next()) |v| {
         v.val.* += 1;
         try testing.expectEqual(original_data[v.idx] + 2, v.val.*);
+    }
+}
+
+test "Cloneable iterator" {
+    const CloneItem = TestIter.CloneableContainer.CloneItem;
+    const original_data = [_]CloneItem{ .{ .data = 1 }, .{ .data = 2 }, .{ .data = 3 } };
+    var data = [_]CloneItem{ .{ .data = 1 }, .{ .data = 2 }, .{ .data = 3 } };
+    var container = TestIter.CloneableContainer{ .data = &data };
+
+    var it = container.iter().cloned().enumerate();
+    while (it.next()) |v| {
+        try testing.expectEqual(original_data[v.idx].data * 2, v.val.data);
     }
 }
