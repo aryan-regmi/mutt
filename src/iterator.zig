@@ -191,10 +191,10 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         }
 
         /// Transforms the iterator into an `ArrayList(Item)`.
-        pub fn collect(self: *Self, allocator: Allocator) ArrayList(Item) {
+        pub fn collect(self: *Self, allocator: Allocator) !ArrayList(Item) {
             var collection = ArrayList(Item).init(allocator);
             while (self.next()) |v| {
-                collection.append(v);
+                try collection.append(v);
             }
             return collection;
         }
@@ -418,4 +418,18 @@ test "Filter iterator" {
     container.resetIter(&it);
     const found = it.find(gt3);
     try testing.expectEqual(4, found.?.*);
+}
+
+test "Collect iterator" {
+    const original_data = [_]u8{ 1, 2, 3, 4, 5 };
+    var data = [_]u8{ 1, 2, 3, 4, 5 };
+    var container = TestIter.Container{ .data = &data };
+
+    var it = container.iter();
+    var collection = try it.collect(testing.allocator);
+    defer collection.deinit();
+
+    for (collection.items, 0..) |v, i| {
+        try testing.expectEqual(original_data[i], v.*);
+    }
 }
