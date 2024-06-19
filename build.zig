@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     b.installArtifact(lib);
+    _ = b.addModule("mutt", .{ .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/lib.zig" } } });
 
     // Unit tests
     const lib_unit_tests = b.addTest(.{
