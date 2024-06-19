@@ -213,9 +213,13 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             return cnt;
         }
 
-        // TODO: Add `filter` function & `Filter` type
+        /// Creates an iterator that only contains elements that return `true` for the predicate.
         pub fn filter(self: *const Self, predicate: *const fn (Item) bool) Filter(Self, Item) {
             return Filter(Self, Item){ .it = @constCast(self), .predicate = predicate };
+        }
+
+        pub fn stepBy(self: *const Self, step: usize) StepBy(Self, Item) {
+            return StepBy(Self, Item){ .it = @constCast(self), .step = step };
         }
     };
 }
@@ -298,6 +302,34 @@ pub fn Filter(comptime Self: type, comptime Item: type) type {
 
         pub fn next(self: *@This()) ?ItemType {
             return self.it.find(self.predicate);
+        }
+    };
+}
+
+pub fn StepBy(comptime Self: type, comptime Item: type) type {
+    return struct {
+        pub const ItemType = Item;
+        it: *Self,
+        step: usize,
+        first: bool = true,
+
+        pub usingnamespace Iterator(@This(), ItemType);
+
+        pub fn next(self: *@This()) ?ItemType {
+            if (self.first) {
+                self.first = false;
+                return self.it.next();
+            }
+
+            for (0..self.step - 1) |_| {
+                _ = self.it.next();
+            }
+
+            if (self.it.next()) |v| {
+                return v;
+            } else {
+                return null;
+            }
         }
     };
 }
@@ -474,4 +506,15 @@ test "Collect iterator" {
     for (collection.items, 0..) |v, i| {
         try testing.expectEqual(original_data[i], v.*);
     }
+}
+
+test "Step iterator" {
+    var data = [_]u8{ 0, 1, 2, 3, 4, 5 };
+    var container = TestIter.Container{ .data = &data };
+
+    var it = container.iter().stepBy(2);
+    try testing.expectEqual(0, it.next().?.*);
+    try testing.expectEqual(2, it.next().?.*);
+    try testing.expectEqual(4, it.next().?.*);
+    try testing.expectEqual(null, it.next());
 }
