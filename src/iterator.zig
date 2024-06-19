@@ -404,22 +404,34 @@ test "Filter iterator" {
 
     var data = [_]u8{ 1, 2, 3, 4, 5 };
     var container = TestIter.Container{ .data = &data };
-
     var it = container.iter();
-    const any = it.any(gt3);
-    try testing.expect(any);
 
-    container.resetIter(&it);
-    const all = it.all(gt0);
-    try testing.expect(all);
+    // Any
+    {
+        defer container.resetIter(&it);
+        const any = it.any(gt3);
+        try testing.expect(any);
+    }
 
-    container.resetIter(&it);
-    const found = it.find(gt3);
-    try testing.expectEqual(4, found.?.*);
+    // All
+    {
+        defer container.resetIter(&it);
+        const all = it.all(gt0);
+        try testing.expect(all);
+    }
 
-    container.resetIter(&it);
-    const found_pos = it.findPos(gt3);
-    try testing.expectEqual(3, found_pos);
+    // Find
+    {
+        defer container.resetIter(&it);
+        const found = it.find(gt3);
+        try testing.expectEqual(4, found.?.*);
+    }
+
+    // Find pos
+    {
+        const found_pos = it.findPos(gt3);
+        try testing.expectEqual(3, found_pos);
+    }
 }
 
 test "Collect iterator" {
