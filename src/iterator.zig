@@ -174,6 +174,20 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
             return null;
         }
 
+        /// Returns the index of the first element that matches the predicate.
+        ///
+        /// If nothing matches, `null` is returned.
+        pub fn findPos(self: *Self, predicate: fn (Item) bool) ?usize {
+            var pos: usize = 0;
+            while (self.next()) |v| {
+                if (predicate(v) == true) {
+                    return pos;
+                }
+                pos += 1;
+            }
+            return null;
+        }
+
         /// Transforms the iterator into an `ArrayList(Item)`.
         pub fn collect(self: *Self, allocator: Allocator) !ArrayList(Item) {
             var collection = ArrayList(Item).init(allocator);
@@ -402,6 +416,10 @@ test "Filter iterator" {
     container.resetIter(&it);
     const found = it.find(gt3);
     try testing.expectEqual(4, found.?.*);
+
+    container.resetIter(&it);
+    const found_pos = it.findPos(gt3);
+    try testing.expectEqual(3, found_pos);
 }
 
 test "Collect iterator" {
