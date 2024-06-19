@@ -183,6 +183,17 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
         pub fn cloned(self: *const Self) Cloned(Self, Item) {
             return Cloned(Self, Item){ .it = @constCast(self) };
         }
+
+        /// Counts and returns the number of iterations in the iterator.
+        ///
+        /// This will call `next` until `null` is returned, consuming the iterator.
+        pub fn count(self: *const Self) usize {
+            var cnt: usize = 0;
+            while (@constCast(self).next()) |_| {
+                cnt += 1;
+            }
+            return cnt;
+        }
     };
 }
 
@@ -339,6 +350,8 @@ test "Create Iterable" {
         v.val.* += 1;
         try testing.expectEqual(original_data[v.idx] + 2, v.val.*);
     }
+
+    try testing.expectEqual(container.iter().count(), 5);
 }
 
 test "Cloneable iterator" {
