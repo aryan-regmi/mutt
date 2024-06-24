@@ -122,6 +122,7 @@ pub fn Iterator(comptime Self: type, comptime Item: type) type {
                 .InvalidNumArgs => @compileError("The `next` function must have only 1 parameter"),
                 .InvalidArgType => @compileError("The `next` function must have one parameter of type `*" ++ self_type ++ "` or `*const " ++ self_type ++ "`"),
                 .InvalidReturnType => @compileError("The `next` function must return a `?" ++ item_type ++ "`"),
+                else => unreachable,
             }
         }
     }

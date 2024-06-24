@@ -7,6 +7,9 @@ pub const InterfaceImplError = struct {
         /// Required associated type not provided.
         MissingRequiredType,
 
+        /// Required field not provided.
+        MissingRequiredField,
+
         /// Required method(s) has incorrect number of arguments.
         InvalidNumArgs,
 

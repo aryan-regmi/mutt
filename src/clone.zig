@@ -48,6 +48,7 @@ pub fn Clone(comptime Self: type) type {
                 .InvalidReturnType => {
                     @compileError("The `clone` function must return `" ++ tname ++ "`");
                 },
+                else => unreachable,
             }
         }
     }
