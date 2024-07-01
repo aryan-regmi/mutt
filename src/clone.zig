@@ -36,6 +36,9 @@ fn hasCloneFromFn(comptime T: type) bool {
 }
 
 /// An interface for a cloneable type.
+///
+/// # Note
+/// Implementations must provide a `clone` function.
 pub fn Clone(comptime Self: type) type {
     comptime _ = checkCloneImpl(Self, true);
     comptime if (hasCloneFromFn(Self)) {
