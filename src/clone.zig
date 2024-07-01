@@ -3,110 +3,55 @@ const testing = std.testing;
 const InterfaceChecker = @import("common.zig").InterfaceChecker;
 
 /// Checks if a the type implments the `Clone` interface.
-// pub fn isClone(comptime T: type) InterfaceImplError {
-//     comptime {
-//         const tinfo = @typeInfo(T);
-//         if ((tinfo == .Struct) or (tinfo == .Union)) {
-//             if (!@hasDecl(T, "clone")) {
-//                 return .{ .valid = false, .reason = .MissingRequiredMethod };
-//             } else {
-//                 const info = @typeInfo(@TypeOf(@field(T, "clone")));
-//                 const num_args = info.Fn.params.len;
-//                 const arg_type = info.Fn.params[0].type.?;
-//                 const ret_type = info.Fn.return_type.?;
-//                 if (num_args != 1) {
-//                     return .{ .valid = false, .reason = .InvalidNumArgs };
-//                 } else if (arg_type != T) {
-//                     return .{ .valid = false, .reason = .InvalidArgType };
-//                 } else if (ret_type != T) {
-//                     return .{ .valid = false, .reason = .InvalidReturnType };
-//                 }
-//             }
-//         } else {
-//             return .{ .valid = false, .reason = .MissingRequiredMethod };
-//         }
-//         return .{ .valid = true };
-//     }
-// }
-
-fn checkCloneImpl(comptime T: type, show_err: bool) InterfaceChecker(T) {
+fn checkCloneImpl(comptime T: type, print_errors: bool) *InterfaceChecker(T) {
     comptime {
-        var checker = InterfaceChecker(T){};
-
-        _ = checker.isEnumStructUnion();
-        if (checker.reason) |_| {
-            if (show_err) {
-                @compileError("Invalid implementation type: must be `Struct`, `Enum`, or `Union`");
-            }
-        }
-
-        _ = checker.hasFunc(.{
+        var checker = InterfaceChecker(T){ .print_error = print_errors };
+        return checker
+            .isEnumStructUnion()
+            .hasFunc(.{
             .name = "clone",
             .num_args = 1,
             .arg_types = &[_]type{T},
             .ret_type = &[_]type{T},
         });
-        if (checker.reason) |r| {
-            if (show_err) {
-                switch (r) {
-                    .MissingRequiredMethod => @compileError("`clone(" ++ @typeName(T) ++ ") " ++ @typeName(T) ++ "` must be implemented by " ++ @typeName(T)),
-                    .InvalidNumArgs => @compileError("The `clone` function must have only 1 parameter"),
-                    .InvalidArgType => @compileError("The `clone` function must have one parameter of type `" ++ @typeName(T) ++ "`"),
-                    .InvalidReturnType => @compileError("The `clone` function must return `" ++ @typeName(T) ++ "`"),
-                    else => unreachable,
-                }
-            }
-        }
-
-        return checker;
     }
 }
 
+/// Returns `true` if `T` implments the `Clone` interface.
 pub fn isClone(comptime T: type) bool {
     comptime {
         const checker = checkCloneImpl(T, false);
-        if (checker.reason) |_| {
-            return false;
-        }
-        return true;
+        return checker.valid;
     }
+}
+
+fn hasCloneFromFn(comptime T: type) bool {
+    var checker = InterfaceChecker(T){ .print_error = false };
+    return checker.isEnumStructUnion().hasFunc(.{
+        .name = "cloneFrom",
+        .num_args = 2,
+        .arg_types = &[_]type{ *T, T },
+        .ret_type = &[_]type{void},
+    }).valid;
 }
 
 /// An interface for a cloneable type.
 pub fn Clone(comptime Self: type) type {
-    comptime checkCloneImpl(Self, true);
-    // comptime {
-    //     const impl = isClone(Self);
-    //     if (!impl.valid) {
-    //         const tname = @typeName(Self);
-    //         switch (impl.reason.?) {
-    //             .MissingRequiredMethod => {
-    //                 @compileError("`clone(" ++ tname ++ ") " ++ tname ++ "` must be implemented by " ++ tname);
-    //             },
-    //             .InvalidNumArgs => {
-    //                 @compileError("The `clone` function must have only 1 parameter");
-    //             },
-    //             .InvalidArgType => {
-    //                 @compileError("The `clone` function must have one parameter of type `*" ++ tname ++ "` or `*const " ++ tname ++ "`");
-    //             },
-    //             .InvalidReturnType => {
-    //                 @compileError("The `clone` function must return `" ++ tname ++ "`");
-    //             },
-    //             else => unreachable,
-    //         }
-    //     }
-    // }
-
-    return struct {
-        /// Performs copy-assignment from `src`.
-        ///
-        /// # Note
-        /// `a.cloneFrom(b)` is equivalent to `a = b.clone()`.
-        /// This can be overridden (by providing a `cloneFrom` implementation)
-        /// to reuse the resources of `a` to avoid unnecessary allocations.
-        pub fn cloneFrom(self: *Self, src: Self) void {
-            self.* = src.clone();
-        }
+    comptime _ = checkCloneImpl(Self, true);
+    comptime if (hasCloneFromFn(Self)) {
+        return struct {};
+    } else {
+        return struct {
+            /// Performs copy-assignment from `src`.
+            ///
+            /// # Note
+            /// `a.cloneFrom(b)` is equivalent to `a = b.clone()`.
+            /// This can be overridden (by providing a `cloneFrom` implementation)
+            /// to reuse the resources of `a` to avoid unnecessary allocations.
+            pub fn cloneFrom(self: *Self, src: Self) void {
+                self.* = src.clone();
+            }
+        };
     };
 }
 

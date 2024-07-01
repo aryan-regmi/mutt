@@ -14,37 +14,57 @@ pub fn InterfaceChecker(comptime T: type) type {
         const Self = @This();
         pub const Info = @typeInfo(T);
 
+        print_error: bool = true,
+        valid: bool = true,
+
         /// Checks that `T` is an enum, struct, or union.
-        pub fn isEnumStructUnion(self: Self) Self {
+        pub fn isEnumStructUnion(self: *Self) *Self {
             comptime {
                 if ((Info != .Struct) and (Info != .Union) and (Info != .Enum)) {
-                    @compileError("Invalid implementation type: must be Enum, Struct, or Union");
+                    self.valid = false;
+                    if (self.print_error) {
+                        @compileError("Invalid implementation type: must be Enum, Struct, or Union");
+                    }
+                } else {
+                    self.valid = true;
                 }
                 return self;
             }
         }
 
         /// Checks that `T` has the function defined by `info`.
-        pub fn hasFunc(self: Self, comptime info: FuncInfo) Self {
+        pub fn hasFunc(self: *Self, comptime info: FuncInfo) *Self {
             comptime {
                 if (!@hasDecl(T, info.name)) {
-                    const err = std.fmt.comptimePrint("Required method missing: {s} must implement the `{s}({any}) {any}`", .{ @typeName(T), info.name, info.arg_types, info.ret_type });
-                    @compileError(err);
+                    self.valid = false;
+                    if (self.print_error) {
+                        const err = std.fmt.comptimePrint("Required method missing: {s} must implement the `{s}({any}) {any}`", .{ @typeName(T), info.name, info.arg_types, info.ret_type });
+                        @compileError(err);
+                    }
+                    return self;
                 }
 
                 const fn_info = @typeInfo(@TypeOf(@field(T, info.name)));
 
                 // Check number of args
                 if (fn_info.Fn.params.len != info.num_args) {
-                    const err = std.fmt.comptimePrint("Incorrect number of arguments: the `{s}` function must have {} arguments", .{ info.name, info.num_args });
-                    @compileError(err);
+                    self.valid = false;
+                    if (self.print_error) {
+                        const err = std.fmt.comptimePrint("Incorrect number of arguments: the `{s}` function must have {} arguments", .{ info.name, info.num_args });
+                        @compileError(err);
+                    }
+                    return self;
                 }
 
                 // Check arg types
                 for (0..info.num_args) |i| {
                     if (fn_info.Fn.params[i].type) |t| {
                         if (t != info.arg_types[i]) {
-                            @compileError("Invalid argument type: expected `" ++ @typeName(t) ++ "`, was `" ++ @typeName(info.arg_types[i]) ++ "`");
+                            self.valid = false;
+                            if (self.print_error) {
+                                @compileError("Invalid argument type: expected `" ++ @typeName(t) ++ "`, was `" ++ @typeName(info.arg_types[i]) ++ "`");
+                            }
+                            return self;
                         }
                     }
                 }
@@ -60,30 +80,44 @@ pub fn InterfaceChecker(comptime T: type) type {
                             }
                         }
                         if (!ret_type_ok) {
-                            @compileError("Invalid return type: expected `" ++ @typeName(info.ret_type.?[0]) ++ "` was `" ++ @typeName(t));
+                            self.valid = false;
+                            if (self.print_error) {
+                                @compileError("Invalid return type: expected `" ++ @typeName(info.ret_type.?[0]) ++ "` was `" ++ @typeName(t));
+                            }
+                            return self;
                         }
                     }
                 }
 
+                self.valid = true;
                 return self;
             }
         }
 
         /// Checks that `T` has an associated type with the given name (`pub const NAME`).
-        pub fn hasAssociatedType(self: Self, comptime name: []const u8) Self {
+        pub fn hasAssociatedType(self: *Self, comptime name: []const u8) *Self {
             comptime {
                 if (!@hasDecl(T, name)) {
-                    @compileError("Missing required associated type: `pub const " ++ name ++ "`");
+                    self.valid = false;
+                    if (self.print_error) {
+                        @compileError("Missing required associated type: `pub const " ++ name ++ "`");
+                    }
+                    return self;
                 }
+                self.valid = true;
                 return self;
             }
         }
 
         /// Checks that `T` has the field with the given name and type (`NAME: FIELD_TYPE`).
-        pub fn hasField(self: Self, comptime name: []const u8, comptime field_type: type) Self {
+        pub fn hasField(self: *Self, comptime name: []const u8, comptime field_type: type) *Self {
             comptime {
                 if (!@hasField(T, name)) {
-                    @compileError("Missing required field: `" ++ name ++ ": " ++ @typeName(field_type) ++ "`");
+                    self.valid = false;
+                    if (self.print_error) {
+                        @compileError("Missing required field: `" ++ name ++ ": " ++ @typeName(field_type) ++ "`");
+                    }
+                    return self;
                 } else {
                     // TODO: Make this work for Enum and Unions!
                     var correct_type = false;
@@ -93,27 +127,29 @@ pub fn InterfaceChecker(comptime T: type) type {
                                 correct_type = true;
                             }
                             if (!correct_type) {
-                                @compileError("Incorrect field type: `" ++ name ++ "` field must be type `" ++ @typeName(field_type) ++ "`");
+                                self.valid = false;
+                                if (self.print_error) {
+                                    @compileError("Incorrect field type: `" ++ name ++ "` field must be type `" ++ @typeName(field_type) ++ "`");
+                                }
+                                return self;
                             }
                         }
                     }
                 }
+                self.valid = true;
                 return self;
             }
         }
 
         /// Allows the user to perform custom checks/validations.
         pub fn customCheck(
-            self: Self,
-            comptime check: *const fn (Self) Self,
-        ) Self {
+            self: *Self,
+            comptime check: *const fn (*Self) *Self,
+        ) *Self {
             comptime {
                 return check(self);
             }
         }
-
-        /// Consumes the `InterfaceChecker` to avoid having to discard return values.
-        pub fn validate(_: Self) void {}
     };
 }
 
@@ -130,11 +166,11 @@ test "Checker" {
     };
 
     comptime {
-        var checker = InterfaceChecker(Tst){};
+        var checker = InterfaceChecker(Tst){ .print_error = true };
 
         // Valid
         {
-            checker
+            _ = checker
                 .hasAssociatedType("Inner")
                 .hasField("info", []const u8)
                 .hasFunc(
@@ -147,17 +183,18 @@ test "Checker" {
             )
                 .customCheck(
                 struct {
-                    pub fn check(self: InterfaceChecker(Tst)) InterfaceChecker(Tst) {
+                    pub fn check(self: *InterfaceChecker(Tst)) *InterfaceChecker(Tst) {
                         const info = @typeInfo(@TypeOf(@field(Tst, "tst")));
                         const rt = info.Fn.return_type.?;
                         if ((rt != anyerror!void) and (rt != void)) {
-                            @compileError("Oh No!");
+                            if (self.print_error) {
+                                @compileError("Oh No!");
+                            }
                         }
                         return self;
                     }
                 }.check,
-            )
-                .validate();
+            );
         }
     }
 }
