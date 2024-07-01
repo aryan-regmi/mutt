@@ -8,52 +8,29 @@ const ArrayList = std.ArrayList;
 
 // TODO: Add overflow checks!
 
-/// Checks if a the type implments the `IntoIter` interface, and reports any errors.
-fn checkIntoIterImpl(comptime T: type, show_err: bool) InterfaceChecker(T) {
+/// Checks if a the type implments the `IntoIter` interface.
+fn checkIntoIterImpl(comptime T: type, print_errors: bool) *InterfaceChecker(T) {
     comptime {
-        var checker = InterfaceChecker(T){};
-
-        checker.isEnumStructUnion();
-        if (checker.reason) |_| {
-            if (show_err) {
-                @compileError("Invalid implementation type: must be `Struct`, `Enum`, or `Union`");
-            }
-        }
-
-        checker.hasFunc(.{
+        var checker = InterfaceChecker(T){ .print_error = print_errors };
+        return checker.isEnumStructUnion().hasFunc(.{
             .name = "iter",
             .num_args = 1,
             .arg_types = &[_]type{*T},
         });
-        if (checker.reason) |r| {
-            if (show_err) {
-                switch (r) {
-                    .MissingRequiredMethod => @compileError("`iter(*" ++ @typeName(T) ++ ")` must be implemented by " ++ @typeName(T)),
-                    .InvalidNumArgs => @compileError("The `iter` function must have only 1 parameter"),
-                    .InvalidArgType => @compileError("The `iter` function must have one parameter of type `*" ++ @typeName(T) ++ "`"),
-                    else => unreachable,
-                }
-            }
-        }
-
-        return checker;
     }
 }
 
-/// Checks if a the type implments the `IntoIter` interface.
+/// Returns `true` if `T` implments the `IntoIter` interface.
 pub fn isIntoIter(comptime T: type) bool {
     comptime {
         const checker = checkIntoIterImpl(T, false);
-        if (checker.reason) |_| {
-            return false;
-        }
-        return true;
+        return checker.valid;
     }
 }
 
 /// An interface for types that can be turned into an `Iterator`.
 pub fn IntoIter(comptime Self: type) type {
-    comptime checkIntoIterImpl(Self, true);
+    comptime _ = checkIntoIterImpl(Self, true);
 
     return struct {
         /// Resets the given iterator.
@@ -63,7 +40,7 @@ pub fn IntoIter(comptime Self: type) type {
                 switch (info) {
                     .Pointer => {
                         const impl = isIterator(info.Pointer.child);
-                        if (!impl.valid) {
+                        if (!impl) {
                             @compileError("`it` must be a valid `Iterator`");
                         }
                     },
@@ -78,86 +55,43 @@ pub fn IntoIter(comptime Self: type) type {
     };
 }
 
-/// Checks if a the type implments the `IntoIter` interface, and reports any errors.
-fn checkIteratorImpl(comptime T: type, show_err: bool) InterfaceChecker(T) {
+/// Checks if a the type implments the `IntoIter` interface.
+fn checkIteratorImpl(comptime T: type, comptime I: type, print_errors: bool) *InterfaceChecker(T) {
     comptime {
-        var checker = InterfaceChecker(T){};
-
-        checker.isEnumStructUnion();
-        if (checker.reason) |_| {
-            if (show_err) {
-                @compileError("Invalid implementation type: must be `Struct`, `Enum`, or `Union`");
-            }
-        }
-
-        checker.hasAssociatedType("ItemType");
-        if (checker.reason) |_| {
-            if (show_err) {
-                @compileError("Missing associated type: `pub const ItemType` must be provided by " ++ @typeName(T));
-            }
-        }
-
-        checker.customCheck(struct {
-            pub fn check(self: *InterfaceChecker(T)) bool {
-                const info = @typeInfo(@TypeOf(@field(T, "next")));
-                const ret_type = info.Fn.return_type.?;
-                if (ret_type != ?T.ItemType) {
-                    switch (@typeInfo(T.ItemType)) {
-                        .Struct => {
-                            // Enumerator `Item` types are valid
-                            if ((@hasDecl(T.ItemType, "ItemType")) and (T.ItemType == IndexedItem(T.ItemType.ItemType))) {
-                                self.reason = null;
-                                return true;
-                            }
-                        },
-                        else => {
-                            self.reason = .InvalidReturnType;
-                            return false;
-                        },
-                    }
-                }
-            }
-        }.check);
-        if (checker.reason) |_| {
-            if (show_err) {
-                @compileError("The `next` function must return a `?ItemType`");
-            }
-        }
-
-        checker.hasFunc(.{
+        var checker = InterfaceChecker(T){ .print_error = print_errors };
+        return checker
+            .isEnumStructUnion()
+            .hasAssociatedType("ItemType")
+            .hasFunc(.{
             .name = "next",
             .num_args = 1,
             .arg_types = &[_]type{*T},
+            .ret_type = &[_]type{?I},
         });
-        if (checker.reason) |r| {
-            if (show_err) {
-                switch (r) {
-                    .MissingRequiredMethod => @compileError("`next(*" ++ @typeName(T) ++ ") ?ItemType` must be implemented by " ++ @typeName(T)),
-                    .InvalidNumArgs => @compileError("The `next` function must have only 1 parameter"),
-                    .InvalidArgType => @compileError("The `next` function must have one parameter of type `*" ++ @typeName(T) ++ "`"),
-                    else => unreachable,
-                }
-            }
-        }
-
-        return checker;
     }
 }
 
-/// Checks if a the type implments the `Iterator` interface.
+/// Returns `true` if `T` implments the `IntoIter` interface.
 pub fn isIterator(comptime T: type) bool {
     comptime {
-        const checker = checkIteratorImpl(T, false);
-        if (checker.reason) |_| {
+        var valid = true;
+        {
+            var checker = InterfaceChecker(T){ .print_error = false };
+            valid = checker.isEnumStructUnion().valid;
+        }
+
+        if (valid) {
+            const checker = checkIteratorImpl(T, T.ItemType, false);
+            return checker.valid;
+        } else {
             return false;
         }
-        return true;
     }
 }
 
 /// An interface for iterable types.
 pub fn Iterator(comptime Self: type, comptime Item: type) type {
-    comptime checkIteratorImpl(Self, true);
+    comptime _ = checkIteratorImpl(Self, Item, true);
 
     return struct {
         /// Creates an iterator that tracks the current iteration count as well as the next value.
@@ -271,7 +205,7 @@ pub fn IndexedItem(comptime Item: type) type {
         idx: usize,
         val: Item,
 
-        pub usingnamespace if (cloneable.isClone(Item).valid) struct {
+        pub usingnamespace if (cloneable.isClone(ItemType)) struct {
             pub fn clone(self: II) II {
                 return .{ .idx = self.idx, .val = self.val.clone() };
             }
@@ -309,7 +243,7 @@ pub fn Enumerator(comptime Self: type, comptime Item: type) type {
 pub fn Cloned(comptime Self: type, comptime Item: type) type {
     comptime {
         const impl = cloneable.isClone(Item);
-        if (!impl.valid) {
+        if (!impl) {
             @compileError("`" ++ @typeName(Item) ++ "` must implement the `Clone` interface");
         }
     }
@@ -377,16 +311,15 @@ pub fn StepBy(comptime Self: type, comptime Item: type) type {
 const TestIter = struct {
     const Container = struct {
         const Self = @This();
-        const Item = *u8;
         data: []u8,
 
-        pub usingnamespace IntoIter(Self, Item);
+        pub usingnamespace IntoIter(Self);
 
         pub const Iter = struct {
             container: *Self,
             idx: usize = 0,
 
-            pub const ItemType = Item;
+            pub const ItemType = *u8;
             pub usingnamespace Iterator(Iter, ItemType);
 
             /// Returns the next item in the iterator.
@@ -407,7 +340,6 @@ const TestIter = struct {
 
     const CloneableContainer = struct {
         const Self = @This();
-        const Item = CloneItem;
         data: []CloneItem,
 
         pub const CloneItem = struct {
@@ -420,13 +352,13 @@ const TestIter = struct {
             }
         };
 
-        pub usingnamespace IntoIter(Self, Item);
+        pub usingnamespace IntoIter(Self);
 
         pub const Iter = struct {
             container: *Self,
             idx: usize = 0,
 
-            pub const ItemType = Item;
+            pub const ItemType = CloneItem;
             pub usingnamespace Iterator(Iter, ItemType);
 
             pub fn next(self: *Iter) ?ItemType {

@@ -12,7 +12,6 @@ pub const FuncInfo = struct {
 pub fn InterfaceChecker(comptime T: type) type {
     return struct {
         const Self = @This();
-        pub const Info = @typeInfo(T);
 
         print_error: bool = true,
         valid: bool = true,
@@ -20,7 +19,8 @@ pub fn InterfaceChecker(comptime T: type) type {
         /// Checks that `T` is an enum, struct, or union.
         pub fn isEnumStructUnion(self: *Self) *Self {
             comptime {
-                if ((Info != .Struct) and (Info != .Union) and (Info != .Enum)) {
+                const INFO = @typeInfo(T);
+                if ((INFO != .Struct) and (INFO != .Union) and (INFO != .Enum)) {
                     self.valid = false;
                     if (self.print_error) {
                         @compileError("Invalid implementation type: must be Enum, Struct, or Union");
@@ -35,13 +35,25 @@ pub fn InterfaceChecker(comptime T: type) type {
         /// Checks that `T` has the function defined by `info`.
         pub fn hasFunc(self: *Self, comptime info: FuncInfo) *Self {
             comptime {
-                if (!@hasDecl(T, info.name)) {
-                    self.valid = false;
-                    if (self.print_error) {
-                        const err = std.fmt.comptimePrint("Required method missing: {s} must implement the `{s}({any}) {any}`", .{ @typeName(T), info.name, info.arg_types, info.ret_type });
-                        @compileError(err);
-                    }
-                    return self;
+                const INFO = @typeInfo(T);
+                switch (INFO) {
+                    .Struct, .Enum, .Union => {
+                        if (!@hasDecl(T, info.name)) {
+                            self.valid = false;
+                            if (self.print_error) {
+                                const err = std.fmt.comptimePrint("Required method missing: {s} must implement the `{s}({any}) {any}`", .{ @typeName(T), info.name, info.arg_types, info.ret_type });
+                                @compileError(err);
+                            }
+                            return self;
+                        }
+                    },
+                    else => {
+                        self.valid = false;
+                        if (self.print_error) {
+                            @compileError("Invalid type: " ++ @typeName(T) ++ " does not implement the `" ++ info.name ++ "` method");
+                        }
+                        return self;
+                    },
                 }
 
                 const fn_info = @typeInfo(@TypeOf(@field(T, info.name)));
@@ -112,6 +124,7 @@ pub fn InterfaceChecker(comptime T: type) type {
         /// Checks that `T` has the field with the given name and type (`NAME: FIELD_TYPE`).
         pub fn hasField(self: *Self, comptime name: []const u8, comptime field_type: type) *Self {
             comptime {
+                const INFO = @typeInfo(T);
                 if (!@hasField(T, name)) {
                     self.valid = false;
                     if (self.print_error) {
@@ -121,9 +134,9 @@ pub fn InterfaceChecker(comptime T: type) type {
                 } else {
                     // TODO: Make this work for Enum and Unions!
                     var correct_type = false;
-                    for (0..Info.Struct.fields.len) |i| {
-                        if (std.mem.eql(u8, Info.Struct.fields[i].name, name)) {
-                            if (Info.Struct.fields[i].type == field_type) {
+                    for (0..INFO.Struct.fields.len) |i| {
+                        if (std.mem.eql(u8, INFO.Struct.fields[i].name, name)) {
+                            if (INFO.Struct.fields[i].type == field_type) {
                                 correct_type = true;
                             }
                             if (!correct_type) {
