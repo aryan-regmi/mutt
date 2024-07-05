@@ -17,7 +17,7 @@ pub fn InterfaceChecker(comptime T: type) type {
         valid: bool = true,
 
         /// Checks that `T` is an enum, struct, or union.
-        pub fn isEnumStructUnion(self: *Self) *Self {
+        pub fn isEnumStructUnion(comptime self: *Self) *Self {
             comptime {
                 const INFO = @typeInfo(T);
                 if ((INFO != .Struct) and (INFO != .Union) and (INFO != .Enum)) {
@@ -33,7 +33,7 @@ pub fn InterfaceChecker(comptime T: type) type {
         }
 
         /// Checks that `T` has the function defined by `info`.
-        pub fn hasFunc(self: *Self, comptime info: FuncInfo) *Self {
+        pub fn hasFunc(comptime self: *Self, comptime info: FuncInfo) *Self {
             comptime {
                 const INFO = @typeInfo(T);
                 switch (INFO) {
@@ -107,7 +107,7 @@ pub fn InterfaceChecker(comptime T: type) type {
         }
 
         /// Checks that `T` has an associated type with the given name (`pub const NAME`).
-        pub fn hasAssociatedType(self: *Self, comptime name: []const u8) *Self {
+        pub fn hasAssociatedType(comptime self: *Self, comptime name: []const u8) *Self {
             comptime {
                 if (!@hasDecl(T, name)) {
                     self.valid = false;
@@ -122,7 +122,7 @@ pub fn InterfaceChecker(comptime T: type) type {
         }
 
         /// Checks that `T` has the field with the given name and type (`NAME: FIELD_TYPE`).
-        pub fn hasField(self: *Self, comptime name: []const u8, comptime field_type: type) *Self {
+        pub fn hasField(comptime self: *Self, comptime name: []const u8, comptime field_type: type) *Self {
             comptime {
                 const INFO = @typeInfo(T);
                 if (!@hasField(T, name)) {
@@ -156,7 +156,7 @@ pub fn InterfaceChecker(comptime T: type) type {
 
         /// Allows the user to perform custom checks/validations.
         pub fn customCheck(
-            self: *Self,
+            comptime self: *Self,
             comptime check: *const fn (*Self) *Self,
         ) *Self {
             comptime {
